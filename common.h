@@ -22,6 +22,18 @@ typedef struct {
     char *val;
 } zend_string;
 
+static zend_always_inline zend_string *
+zend_string_init(char *val, size_t len, zend_bool persistent)
+{
+    zend_string *str = pemalloc(sizeof(zend_string) + len + 1, persistent);
+    str->val = (char *)str + sizeof(zend_string);
+    memcpy(str->val, val, len);
+    str->val[len] = '\0';
+    str->len = len;
+    str->gc = 0x01;
+    return str;
+}
+
 #define zend_string_release(s) do { \
     if ((s) && (s)->gc) { \
         if ((s)->gc & 0x10 && (s)->val) efree((s)->val); \
@@ -589,9 +601,9 @@ typedef struct fold_item {
 /* {{{ struct RedisSock */
 typedef struct {
     php_stream     *stream;
-    char           *host;
+    zend_string    *host;
     short          port;
-    char           *auth;
+    zend_string    *auth;
     double         timeout;
     double         read_timeout;
     long           retry_interval;
@@ -599,13 +611,12 @@ typedef struct {
     int            status;
     int            persistent;
     int            watching;
-    char           *persistent_id;
+    zend_string    *persistent_id;
 
     int            serializer;
     long           dbNumber;
 
-    char           *prefix;
-    int            prefix_len;
+    zend_string    *prefix;
 
     redis_mode     mode;
     fold_item      *head;
@@ -614,8 +625,7 @@ typedef struct {
     char           *pipeline_cmd;
     size_t         pipeline_len;
 
-    char           *err;
-    int            err_len;
+    zend_string    *err;
     zend_bool      lazy_connect;
 
     int            scan;

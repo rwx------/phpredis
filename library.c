@@ -82,8 +82,8 @@ static int resend_auth(RedisSock *redis_sock TSRMLS_DC) {
     char *cmd, *response;
     int cmd_len, response_len;
 
-    cmd_len = redis_spprintf(redis_sock, NULL TSRMLS_CC, &cmd, "AUTH", "s",
-                             redis_sock->auth, strlen(redis_sock->auth));
+    cmd_len = redis_spprintf(redis_sock, NULL TSRMLS_CC, &cmd, "AUTH", "S",
+                             redis_sock->auth);
 
     if (redis_sock_write(redis_sock, cmd, cmd_len TSRMLS_CC) < 0) {
         efree(cmd);
@@ -117,11 +117,11 @@ static void
 redis_error_throw(RedisSock *redis_sock TSRMLS_DC)
 {
     if (redis_sock != NULL && redis_sock->err != NULL &&
-        memcmp(redis_sock->err, "ERR", sizeof("ERR") - 1) != 0 &&
-        memcmp(redis_sock->err, "NOSCRIPT", sizeof("NOSCRIPT") - 1) != 0 &&
-        memcmp(redis_sock->err, "WRONGTYPE", sizeof("WRONGTYPE") - 1) != 0
+        memcmp(redis_sock->err->val, "ERR", sizeof("ERR") - 1) != 0 &&
+        memcmp(redis_sock->err->val, "NOSCRIPT", sizeof("NOSCRIPT") - 1) != 0 &&
+        memcmp(redis_sock->err->val, "WRONGTYPE", sizeof("WRONGTYPE") - 1) != 0
     ) {
-        zend_throw_exception(redis_exception_ce, redis_sock->err, 0 TSRMLS_CC);
+        zend_throw_exception(redis_exception_ce, redis_sock->err->val, 0 TSRMLS_CC);
     }
 }
 
@@ -1364,7 +1364,7 @@ redis_sock_create(char *host, int host_len, unsigned short port,
     RedisSock *redis_sock;
 
     redis_sock         = ecalloc(1, sizeof(RedisSock));
-    redis_sock->host   = estrndup(host, host_len);
+    redis_sock->host = zend_string_init(host, host_len, 0);
     redis_sock->stream = NULL;
     redis_sock->status = REDIS_SOCK_STATUS_DISCONNECTED;
     redis_sock->watching = 0;
@@ -1375,7 +1375,7 @@ redis_sock_create(char *host, int host_len, unsigned short port,
     redis_sock->persistent_id = NULL;
 
     if(persistent_id) {
-        redis_sock->persistent_id = estrdup(persistent_id);
+        redis_sock->persistent_id = zend_string_init(persistent_id, strlen(persistent_id), 0);
     }
 
     redis_sock->port    = port;
@@ -1391,7 +1391,6 @@ redis_sock_create(char *host, int host_len, unsigned short port,
     redis_sock->pipeline_len = 0;
 
     redis_sock->err = NULL;
-    redis_sock->err_len = 0;
 
     redis_sock->scan = REDIS_SCAN_NORETRY;
 
@@ -1425,8 +1424,8 @@ PHP_REDIS_API int redis_sock_connect(RedisSock *redis_sock TSRMLS_DC)
     read_tv.tv_sec  = (time_t)redis_sock->read_timeout;
     read_tv.tv_usec = (int)((redis_sock->read_timeout-read_tv.tv_sec)*1000000);
 
-    if(redis_sock->host[0] == '/' && redis_sock->port < 1) {
-        host_len = snprintf(host, sizeof(host), "unix://%s", redis_sock->host);
+    if (*redis_sock->host->val == '/' && redis_sock->port < 1) {
+        host_len = snprintf(host, sizeof(host), "unix://%s", redis_sock->host->val);
     } else {
         if(redis_sock->port == 0)
             redis_sock->port = 6379;
@@ -1434,17 +1433,17 @@ PHP_REDIS_API int redis_sock_connect(RedisSock *redis_sock TSRMLS_DC)
 #ifdef HAVE_IPV6
         /* If we've got IPv6 and find a colon in our address, convert to proper
          * IPv6 [host]:port format */
-        if (strchr(redis_sock->host, ':') != NULL) {
+        if (strchr(redis_sock->host->val, ':') != NULL) {
             fmtstr = "[%s]:%d";
         }
 #endif
-        host_len = snprintf(host, sizeof(host), fmtstr, redis_sock->host, redis_sock->port);
+        host_len = snprintf(host, sizeof(host), fmtstr, redis_sock->host->val, redis_sock->port);
     }
 
     if (redis_sock->persistent) {
         if (redis_sock->persistent_id) {
             spprintf(&persistent_id, 0, "phpredis:%s:%s", host,
-                redis_sock->persistent_id);
+                redis_sock->persistent_id->val);
         } else {
             spprintf(&persistent_id, 0, "phpredis:%s:%f", host,
                 redis_sock->timeout);
@@ -1557,17 +1556,13 @@ redis_sock_set_err(RedisSock *redis_sock, const char *msg, int msg_len)
 {
     // Free our last error
     if (redis_sock->err != NULL) {
-        efree(redis_sock->err);
+        zend_string_release(redis_sock->err);
+        redis_sock->err = NULL;
     }
 
     if (msg != NULL && msg_len > 0) {
         // Copy in our new error message
-        redis_sock->err = estrndup(msg, msg_len);
-        redis_sock->err_len = msg_len;
-    } else {
-        // Set to null, with zero length
-        redis_sock->err = NULL;
-        redis_sock->err_len = 0;
+        redis_sock->err = zend_string_init((char *)msg, msg_len, 0);
     }
 }
 
@@ -1775,22 +1770,22 @@ redis_sock_write(RedisSock *redis_sock, char *cmd, size_t sz TSRMLS_DC)
  */
 PHP_REDIS_API void redis_free_socket(RedisSock *redis_sock)
 {
-    if(redis_sock->prefix) {
-        efree(redis_sock->prefix);
+    if (redis_sock->prefix) {
+        zend_string_release(redis_sock->prefix);
     }
     if (redis_sock->pipeline_cmd) {
         efree(redis_sock->pipeline_cmd);
     }
-    if(redis_sock->err) {
-        efree(redis_sock->err);
+    if (redis_sock->err) {
+        zend_string_release(redis_sock->err);
     }
-    if(redis_sock->auth) {
-        efree(redis_sock->auth);
+    if (redis_sock->auth) {
+        zend_string_release(redis_sock->auth);
     }
-    if(redis_sock->persistent_id) {
-        efree(redis_sock->persistent_id);
+    if (redis_sock->persistent_id) {
+        zend_string_release(redis_sock->persistent_id);
     }
-    efree(redis_sock->host);
+    zend_string_release(redis_sock->host);
     efree(redis_sock);
 }
 
@@ -1945,14 +1940,14 @@ redis_key_prefix(RedisSock *redis_sock, char **key, strlen_t *key_len) {
     int ret_len;
     char *ret;
 
-    if(redis_sock->prefix == NULL || redis_sock->prefix_len == 0) {
+    if (redis_sock->prefix == NULL) {
         return 0;
     }
-
-    ret_len = redis_sock->prefix_len + *key_len;
+    
+    ret_len = redis_sock->prefix->len + *key_len;
     ret = ecalloc(1 + ret_len, 1);
-    memcpy(ret, redis_sock->prefix, redis_sock->prefix_len);
-    memcpy(ret + redis_sock->prefix_len, *key, *key_len);
+    memcpy(ret, redis_sock->prefix->val, redis_sock->prefix->len);
+    memcpy(ret + redis_sock->prefix->len, *key, *key_len);
 
     *key = ret;
     *key_len = ret_len;

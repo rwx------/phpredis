@@ -48,8 +48,8 @@
 /* Compare redirection slot information with what we have */
 #define CLUSTER_REDIR_CMP(c) \
     (SLOT_SOCK(c,c->redir_slot)->port != c->redir_port || \
-    strlen(SLOT_SOCK(c,c->redir_slot)->host) != c->redir_host_len || \
-    memcmp(SLOT_SOCK(c,c->redir_slot)->host,c->redir_host,c->redir_host_len))
+    SLOT_SOCK(c,c->redir_slot)->host->len != c->redir_host_len || \
+    memcmp(SLOT_SOCK(c,c->redir_slot)->host->val, c->redir_host, c->redir_host_len))
 
 /* Lazy connect logic */
 #define CLUSTER_LAZY_CONNECT(s) \

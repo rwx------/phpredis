@@ -2984,11 +2984,10 @@ PHP_METHOD(Redis, getLastError) {
     }
 
 	/* Return our last error or NULL if we don't have one */
-	if(redis_sock->err != NULL && redis_sock->err_len > 0) {
-		RETURN_STRINGL(redis_sock->err, redis_sock->err_len);
-	} else {
-		RETURN_NULL();
-	}
+    if (redis_sock->err == NULL) {
+        RETURN_NULL();
+    }
+    RETURN_STRINGL(redis_sock->err->val, redis_sock->err->len);
 }
 
 /* {{{ proto Redis::clearLastError() */
@@ -3065,11 +3064,10 @@ PHP_METHOD(Redis, isConnected) {
 PHP_METHOD(Redis, getHost) {
     RedisSock *redis_sock;
 
-    if((redis_sock = redis_sock_get_connected(INTERNAL_FUNCTION_PARAM_PASSTHRU))) {
-        RETURN_STRING(redis_sock->host);
-    } else {
+    if ((redis_sock = redis_sock_get_connected(INTERNAL_FUNCTION_PARAM_PASSTHRU)) == NULL) {
         RETURN_FALSE;
     }
+    RETURN_STRINGL(redis_sock->host->val, redis_sock->host->len);
 }
 
 /* {{{ proto Redis::getPort() */
@@ -3123,11 +3121,10 @@ PHP_METHOD(Redis, getPersistentID) {
     RedisSock *redis_sock;
 
     if((redis_sock = redis_sock_get_connected(INTERNAL_FUNCTION_PARAM_PASSTHRU))) {
-        if(redis_sock->persistent_id != NULL) {
-            RETURN_STRING(redis_sock->persistent_id);
-        } else {
+        if (redis_sock->persistent_id == NULL) {
             RETURN_NULL();
         }
+        RETURN_STRINGL(redis_sock->persistent_id->val, redis_sock->persistent_id->len);
     } else {
         RETURN_FALSE;
     }
@@ -3138,11 +3135,10 @@ PHP_METHOD(Redis, getAuth) {
     RedisSock *redis_sock;
 
     if((redis_sock = redis_sock_get_connected(INTERNAL_FUNCTION_PARAM_PASSTHRU))) {
-        if(redis_sock->auth != NULL) {
-            RETURN_STRING(redis_sock->auth);
-        } else {
+        if (redis_sock->auth == NULL) {
             RETURN_NULL();
         }
+        RETURN_STRINGL(redis_sock->auth->val, redis_sock->auth->len);
     } else {
         RETURN_FALSE;
     }

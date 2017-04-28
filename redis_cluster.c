@@ -1069,7 +1069,7 @@ PHP_METHOD(RedisCluster, keys) {
                              TSRMLS_CC)<0)
         {
             php_error_docref(0 TSRMLS_CC, E_ERROR, "Can't send KEYS to %s:%d",
-                node->sock->host, node->sock->port);
+                node->sock->host->val, node->sock->port);
             efree(cmd);
             RETURN_FALSE;
         }
@@ -1078,7 +1078,7 @@ PHP_METHOD(RedisCluster, keys) {
         resp = cluster_read_resp(c TSRMLS_CC);
         if(!resp) {
             php_error_docref(0 TSRMLS_CC, E_WARNING, 
-                "Can't read response from %s:%d", node->sock->host, 
+                "Can't read response from %s:%d", node->sock->host->val,
                 node->sock->port);
             continue;
         }
@@ -1988,7 +1988,6 @@ PHP_METHOD(RedisCluster, _masters) {
     redisCluster *c = GET_CONTEXT();
     redisClusterNode *node;
     zval zv, *z_ret = &zv;
-    char *host;
     short port;
 
     array_init(z_ret);
@@ -1997,7 +1996,6 @@ PHP_METHOD(RedisCluster, _masters) {
         (node = zend_hash_get_current_data_ptr(c->nodes)) != NULL;
         zend_hash_move_forward(c->nodes))
     {
-        host = node->sock->host;
         port = node->sock->port;
 
         zval z, *z_sub = &z;
@@ -2006,7 +2004,7 @@ PHP_METHOD(RedisCluster, _masters) {
 #endif
         array_init(z_sub);
 
-        add_next_index_stringl(z_sub, host, strlen(host));
+        add_next_index_stringl(z_sub, node->sock->host->val, node->sock->host->len);
         add_next_index_long(z_sub, port);
         add_next_index_zval(z_ret, z_sub);
     }

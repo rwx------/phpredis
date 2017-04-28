@@ -1347,7 +1347,7 @@ PHP_REDIS_API short cluster_find_slot(redisCluster *c, const char *host,
     for(i=0;i<REDIS_CLUSTER_SLOTS;i++) {
         if(c->master[i] && c->master[i]->sock &&
            c->master[i]->sock->port == port &&
-           !strcasecmp(c->master[i]->sock->host, host))
+           !strcasecmp(c->master[i]->sock->host->val, host))
         {
             return i;
         }

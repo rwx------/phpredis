@@ -690,13 +690,11 @@ ra_is_write_cmd(RedisArray *ra, const char *cmd, int cmd_len) {
 
 /* list keys from array index */
 static long
-ra_rehash_scan(zval *z_redis, char ***keys, int **key_lens, const char *cmd, const char *arg TSRMLS_DC) {
+ra_rehash_scan(zval *z_redis, zend_string ***keys, const char *cmd, const char *arg TSRMLS_DC) {
 
 	long count, i;
 	zval z_fun_smembers, z_ret, z_arg[1], *z_data_p;
 	HashTable *h_keys;
-	char *key;
-	int key_len;
 
 	/* arg */
     ZVAL_STRING(&z_arg[0], arg);
@@ -714,18 +712,11 @@ ra_rehash_scan(zval *z_redis, char ***keys, int **key_lens, const char *cmd, con
 
 	/* allocate key array */
 	count = zend_hash_num_elements(h_keys);
-	*keys = emalloc(count * sizeof(char*));
-	*key_lens = emalloc(count * sizeof(int));
+	*keys = ecalloc(count, sizeof(zend_string *));
 
     i = 0;
     ZEND_HASH_FOREACH_VAL(h_keys, z_data_p) {
-		key = Z_STRVAL_P(z_data_p);
-		key_len = Z_STRLEN_P(z_data_p);
-
-		/* copy key and length */
-		(*keys)[i] = estrndup(key, key_len);
-		(*key_lens)[i] = key_len;
-        i++;
+        (*keys)[i++] = zval_get_string(z_data_p);
 	} ZEND_HASH_FOREACH_END();
 
 	/* cleanup */
@@ -1164,16 +1155,16 @@ static void
 ra_rehash_server(RedisArray *ra, zval *z_redis, const char *hostname, zend_bool b_index,
 		zend_fcall_info *z_cb, zend_fcall_info_cache *z_cb_cache TSRMLS_DC) {
 
-	char **keys;
+    zend_string **keys;
 	long count, i;
-	int *key_lens, target_pos;
+	int target_pos;
 	zval *z_target, z_ret;
 
 	/* list all keys */
 	if(b_index) {
-		count = ra_rehash_scan(z_redis, &keys, &key_lens, "SMEMBERS", PHPREDIS_INDEX_NAME TSRMLS_CC);
+        count = ra_rehash_scan(z_redis, &keys, "SMEMBERS", PHPREDIS_INDEX_NAME TSRMLS_CC);
 	} else {
-		count = ra_rehash_scan(z_redis, &keys, &key_lens, "KEYS", "*" TSRMLS_CC);
+        count = ra_rehash_scan(z_redis, &keys, "KEYS", "*" TSRMLS_CC);
 	}
 
     if (count < 0) return;
@@ -1189,19 +1180,18 @@ ra_rehash_server(RedisArray *ra, zval *z_redis, const char *hostname, zend_bool 
 	for(i = 0; i < count; ++i) {
 
 		/* check that we're not moving to the same node. */
-		z_target = ra_find_node(ra, keys[i], key_lens[i], &target_pos TSRMLS_CC);
+        z_target = ra_find_node(ra, keys[i]->val, keys[i]->len, &target_pos TSRMLS_CC);
 
 		if (z_target && strcmp(hostname, ra->hosts[target_pos])) { /* different host */
 			/* php_printf("move [%s] from [%s] to [%s]\n", keys[i], hostname, ra->hosts[target_pos]); */
-			ra_move_key(keys[i], key_lens[i], z_redis, z_target TSRMLS_CC);
+            ra_move_key(keys[i]->val, keys[i]->len, z_redis, z_target TSRMLS_CC);
 		}
 
 	    /* cleanup */
-		efree(keys[i]);
+        zend_string_release(keys[i]);
 	}
 
 	efree(keys);
-	efree(key_lens);
 }
 
 void
